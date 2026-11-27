@@ -1,0 +1,179 @@
+﻿using Microsoft.EntityFrameworkCore;
+using A1Commerce.Core.Entities;
+using A1Commerce.Core.Auth;
+using A1Commerce.Core.Configuration;
+using A1Commerce.Core.Events;
+using A1Commerce.Infrastructure.Auditing;
+using A1Commerce.Infrastructure.Events;
+
+
+namespace A1Commerce.Infrastructure
+{
+    public class I25DbContext : DbContext
+    {
+        private readonly IEventDispatcher? _events;
+        private readonly ICurrentUser? _currentUser;
+
+        // The dispatcher and the current user are optional so the context still works (e.g. in EF design-time
+        // tools) when events or authentication are not registered.
+        public I25DbContext(
+            DbContextOptions<I25DbContext> options,
+            IEventDispatcher? events = null,
+            ICurrentUser? currentUser = null) : base(options)
+        {
+            _events = events;
+            _currentUser = currentUser;
+        }
+
+        public DbSet<AuditLog> AuditLogs { get; set; } = null!;
+        public DbSet<AuditLogChange> AuditLogChange { get; set; } = null!;
+
+        // Accounts and sign-in
+        public DbSet<User> Users { get; set; } = null!;
+        public DbSet<Role> Roles { get; set; } = null!;
+        public DbSet<UserRole> UserRoles { get; set; } = null!;
+        public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+        public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            base.OnModelCreating(modelBuilder);
+
+            modelBuilder.ApplyConfiguration(new AuditLogMap());
+            modelBuilder.ApplyConfiguration(new AuditLogChangeMap());
+            modelBuilder.ApplyConfiguration(new DatabaseNotificationMap());
+            modelBuilder.ApplyConfiguration(new UserMap());
+            modelBuilder.ApplyConfiguration(new RoleMap());
+            modelBuilder.ApplyConfiguration(new UserRoleMap());
+            modelBuilder.ApplyConfiguration(new RefreshTokenMap());
+            modelBuilder.ApplyConfiguration(new PasswordResetTokenMap());
+
+            DbSeed.Apply(modelBuilder);
+
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                if (typeof(BaseEntity).IsAssignableFrom(entityType.ClrType))
+                {
+                    modelBuilder.Entity(entityType.ClrType)
+                        .Property(nameof(BaseEntity.intConcurrencyId))
+                        .IsConcurrencyToken();
+                }
+            }      
+        }
+
+        public override int SaveChanges()
+        {
+            var events = _events == null ? null : ModelEventCapture.Capture(ChangeTracker);
+
+            var result = SaveChangesWithAudit();
+
+            if (events?.Count > 0)
+            {
+                // Synchronous save path: wait for the (async) listeners.
+                foreach (var @event in events)
+                    _events!.DispatchAsync(@event).GetAwaiter().GetResult();
+            }
+
+            return result;
+        }
+
+        private int SaveChangesWithAudit()
+        {
+            IncrementConcurrencyIds();
+
+            var pending = AuditTrail.Capture(ChangeTracker);
+
+            if (pending.Count == 0)
+                return base.SaveChanges();
+
+            // Data change and its audit rows commit or roll back together.
+            using var transaction = Database.CurrentTransaction == null
+                ? Database.BeginTransaction()
+                : null;
+
+            var result = base.SaveChanges();
+
+            AuditLogs.AddRange(AuditTrail.Complete(pending, DateTime.UtcNow, _currentUser));
+            base.SaveChanges();
+
+            transaction?.Commit();
+
+            return result;
+        }
+
+        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+        {
+            // Read what is about to change now: after the save, EF resets the states.
+            var events = _events == null ? null : ModelEventCapture.Capture(ChangeTracker);
+
+            var result = await SaveChangesWithAuditAsync(cancellationToken);
+
+            // After commit: ids exist and the data can no longer be rolled back.
+            if (events?.Count > 0)
+            {
+                foreach (var @event in events)
+                    await _events!.DispatchAsync(@event, cancellationToken);
+            }
+
+            return result;
+        }
+
+        private async Task<int> SaveChangesWithAuditAsync(CancellationToken cancellationToken)
+        {
+            IncrementConcurrencyIds();
+
+            var entries = ChangeTracker
+                           .Entries()
+                           .Where(e => e.Entity is BaseEntity &&
+                                       (e.State == EntityState.Added ||
+                                        e.State == EntityState.Modified));
+
+            foreach (var entry in entries)
+            {
+                var entity = (BaseEntity)entry.Entity;
+
+                if (entry.State == EntityState.Added)
+                {
+                    entity.CreateAt = DateTime.UtcNow;
+                    entity.ModifiedAt = DateTime.UtcNow;
+                }
+                else if (entry.State == EntityState.Modified)
+                {
+                    entity.ModifiedAt = DateTime.UtcNow;
+
+                    // Don't change CreateAt during an update
+                    entry.Property(nameof(BaseEntity.CreateAt)).IsModified = false;
+                }
+            }
+
+            var pending = AuditTrail.Capture(ChangeTracker);
+
+            if (pending.Count == 0)
+                return await base.SaveChangesAsync(cancellationToken);
+
+            // Data change and its audit rows commit or roll back together.
+            await using var transaction = Database.CurrentTransaction == null
+                ? await Database.BeginTransactionAsync(cancellationToken)
+                : null;
+
+            // First save: writes the data and fills database-generated ids for inserts.
+            var result = await base.SaveChangesAsync(cancellationToken);
+
+            // Second save: writes the audit rows (base call, so they are not audited themselves).
+            AuditLogs.AddRange(AuditTrail.Complete(pending, DateTime.UtcNow, _currentUser));
+            await base.SaveChangesAsync(cancellationToken);
+
+            if (transaction != null)
+                await transaction.CommitAsync(cancellationToken);
+
+            return result;
+        }
+
+        private void IncrementConcurrencyIds()
+        {
+            foreach (var entry in ChangeTracker.Entries<BaseEntity>().Where(e => e.State == EntityState.Modified))
+            {
+                entry.Entity.intConcurrencyId = (entry.Entity.intConcurrencyId ?? 0) + 1;
+            }
+        }
+    }
+}

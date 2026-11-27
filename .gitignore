@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+.vs/
+**/.vs/
+*.user
+*.suo
+TestResults/
+
+# Files written at run time: mail Log driver and the local/public storage disks.
+# Anchored, so source folders named "Storage" are NOT ignored.
+/storage/
+/A1Commerce.Web/storage/
+
+# Structured log files (Serilog rolling file).
+/logs/
+/A1Commerce.Web/logs/
