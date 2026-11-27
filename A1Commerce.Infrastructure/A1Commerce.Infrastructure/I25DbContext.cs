@@ -41,6 +41,11 @@ namespace A1Commerce.Infrastructure
         // Written in full: System.Attribute is in scope too.
         public DbSet<Core.Entities.Attribute> Attributes { get; set; } = null!;
 
+        public DbSet<Product> Products { get; set; } = null!;
+        public DbSet<ProductAttribute> ProductAttributes { get; set; } = null!;
+        public DbSet<ProductAttributeValue> ProductAttributeValues { get; set; } = null!;
+        public DbSet<ProductImage> ProductImages { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -55,6 +60,10 @@ namespace A1Commerce.Infrastructure
             modelBuilder.ApplyConfiguration(new PasswordResetTokenMap());
             modelBuilder.ApplyConfiguration(new CategoryMap());
             modelBuilder.ApplyConfiguration(new AttributeMap());
+            modelBuilder.ApplyConfiguration(new ProductMap());
+            modelBuilder.ApplyConfiguration(new ProductAttributeMap());
+            modelBuilder.ApplyConfiguration(new ProductAttributeValueMap());
+            modelBuilder.ApplyConfiguration(new ProductImageMap());
 
             DbSeed.Apply(modelBuilder);
 
