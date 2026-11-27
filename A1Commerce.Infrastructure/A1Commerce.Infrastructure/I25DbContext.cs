@@ -38,6 +38,9 @@ namespace A1Commerce.Infrastructure
         // Catalog
         public DbSet<Category> Categories { get; set; } = null!;
 
+        // Written in full: System.Attribute is in scope too.
+        public DbSet<Core.Entities.Attribute> Attributes { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -51,6 +54,7 @@ namespace A1Commerce.Infrastructure
             modelBuilder.ApplyConfiguration(new RefreshTokenMap());
             modelBuilder.ApplyConfiguration(new PasswordResetTokenMap());
             modelBuilder.ApplyConfiguration(new CategoryMap());
+            modelBuilder.ApplyConfiguration(new AttributeMap());
 
             DbSeed.Apply(modelBuilder);
 

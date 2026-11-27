@@ -42,6 +42,7 @@ try
     builder.Services.AddScoped(typeof(IBusinessLayer<>), typeof(BaseBusinessLayer<>));
     builder.Services.AddScoped<IAuditLogBusinessLayer, AuditLogBusinessLayerLayer>();
     builder.Services.AddScoped<ICategoryBusinessLayer, CategoryBusinessLayer>();
+    builder.Services.AddScoped<IAttributeBusinessLayer, AttributeBusinessLayer>();
 
 
     //Validators
