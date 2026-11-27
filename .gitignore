@@ -14,3 +14,6 @@ TestResults/
 # Structured log files (Serilog rolling file).
 /logs/
 /A1Commerce.Web/logs/
+
+# Local test credentials (never committed).
+*.local.json

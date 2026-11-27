@@ -41,6 +41,7 @@ try
     builder.Services.AddScoped<IRepository, BaseRepository>();
     builder.Services.AddScoped(typeof(IBusinessLayer<>), typeof(BaseBusinessLayer<>));
     builder.Services.AddScoped<IAuditLogBusinessLayer, AuditLogBusinessLayerLayer>();
+    builder.Services.AddScoped<ICategoryBusinessLayer, CategoryBusinessLayer>();
 
 
     //Validators

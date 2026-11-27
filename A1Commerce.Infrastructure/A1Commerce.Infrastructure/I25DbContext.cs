@@ -34,6 +34,10 @@ namespace A1Commerce.Infrastructure
         public DbSet<UserRole> UserRoles { get; set; } = null!;
         public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
+
+        // Catalog
+        public DbSet<Category> Categories { get; set; } = null!;
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -46,6 +50,7 @@ namespace A1Commerce.Infrastructure
             modelBuilder.ApplyConfiguration(new UserRoleMap());
             modelBuilder.ApplyConfiguration(new RefreshTokenMap());
             modelBuilder.ApplyConfiguration(new PasswordResetTokenMap());
+            modelBuilder.ApplyConfiguration(new CategoryMap());
 
             DbSeed.Apply(modelBuilder);
 
